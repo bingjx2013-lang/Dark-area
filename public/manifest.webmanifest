@@ -1,0 +1,17 @@
+{
+  "name": "暗域 · SYNC",
+  "short_name": "暗域",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050508",
+  "theme_color": "#050508",
+  "description": "手机端实时房间聊天",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

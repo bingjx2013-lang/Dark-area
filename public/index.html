@@ -1,0 +1,46 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#050508"><meta name="color-scheme" content="dark">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="apple-mobile-web-app-title" content="暗域">
+<link rel="manifest" href="/manifest.webmanifest"><link rel="icon" href="/icon.svg" type="image/svg+xml">
+<title>暗域 · SYNC</title>
+<style>
+:root{--bg:#050508;--ln:rgba(0,238,255,.25);--c:#00eeff;--v:#a800ff;--g:#00ff94;--r:#ff3a5e;--t:#c9d4e3;--d:#6c7a90}
+*{box-sizing:border-box;margin:0}html,body{height:100%}
+body{background:radial-gradient(900px 600px at 80% -10%,#170b30,transparent 60%),var(--bg);color:var(--t);font:14px/1.6 ui-monospace,Menlo,Consolas,"PingFang SC","Microsoft YaHei",monospace;overflow:hidden}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(255,255,255,.025) 0 1px,transparent 1px 3px)}
+.screen{position:fixed;inset:0;display:none;flex-direction:column;padding-top:env(safe-area-inset-top)}.screen.on{display:flex}
+.logo{font-weight:700;letter-spacing:.12em;color:var(--c);text-shadow:0 0 12px var(--c)}.logo b{color:var(--v);text-shadow:0 0 12px var(--v)}
+#login{justify-content:center;align-items:center;padding:20px}
+.card{width:100%;max-width:380px;border:1px solid var(--ln);background:rgba(14,18,30,.7);padding:22px;display:flex;flex-direction:column;gap:12px;clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,16px 100%,0 calc(100% - 16px))}
+.card .logo{font-size:22px}input{background:rgba(0,0,0,.5);border:1px solid var(--ln);color:var(--t);font:inherit;padding:11px 12px;width:100%;border-radius:0}
+input:focus-visible,.btn:focus-visible{outline:2px solid var(--c);outline-offset:2px}.btn{all:unset;cursor:pointer;padding:11px 16px;border:1px solid var(--c);color:var(--c);text-align:center;white-space:nowrap}.btn:active{background:rgba(0,238,255,.2)}small{color:var(--d)}
+header{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--ln);background:rgba(5,5,8,.85)}header .sp{flex:1;min-width:0}header .rm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--c)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(--r)}.dot.ok{background:var(--g);box-shadow:0 0 8px var(--g)}
+#chat{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:10px}.m{max-width:84%;padding:8px 11px;border-left:2px solid var(--c);background:rgba(0,238,255,.06);align-self:flex-start;word-break:break-word;white-space:pre-wrap}
+.m.me{align-self:flex-end;border-left:0;border-right:2px solid var(--v);background:rgba(168,0,255,.12)}.m em{display:block;font-style:normal;color:var(--d);font-size:11px;white-space:normal}.m.sys{align-self:center;border:0;background:none;color:var(--d);font-size:12px}
+.bar{display:flex;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--ln);background:rgba(5,5,8,.9)}#hint{color:var(--g);font-size:12px}
+</style></head><body>
+<div class="screen on" id="login"><div class="card"><div class="logo">暗域 · <b>SYNC</b></div>
+<small>实时加密聊天。输入相同的房间名即可进入同一个房间。</small>
+<input id="nm" placeholder="昵称" maxlength="20" autocomplete="nickname" aria-label="昵称"><input id="rm" placeholder="房间名（字母、数字、中文）" maxlength="30" aria-label="房间名"><input id="pw" type="password" placeholder="房间密钥（可选，设置后端到端加密）" autocomplete="off" aria-label="房间密钥">
+<button class="btn" id="go">进入房间</button><button class="btn" id="inst" style="display:none">安装到手机</button><div id="hint"></div><small id="err" style="color:var(--r)"></small></div></div>
+<div class="screen" id="main"><header><button class="btn" id="back" aria-label="离开房间" style="padding:6px 10px">‹</button><div class="sp"><div class="rm" id="rt"></div><small><span class="dot" id="dot"></span><span id="st">连接中</span> · <span id="on">在线 0</span></small></div><span id="lock"></span></header><div id="chat" aria-live="polite"></div><div class="bar"><input id="msg" placeholder="输入消息" maxlength="500" aria-label="消息" autocomplete="off"><button class="btn" id="snd">发送</button></div></div>
+<script>
+const $=s=>document.querySelector(s);
+const cid=(()=>{try{let v=localStorage.getItem('cid');if(!v){v=Math.random().toString(36).slice(2,12);localStorage.setItem('cid',v)}return v}catch(e){return Math.random().toString(36).slice(2,12)}})();
+let ws=null,K=null,me='',room='',joined=false,retry=0,Q=Promise.resolve(),list=[];
+const b64=u=>{let s='';for(let i=0;i<u.length;i+=8192)s+=String.fromCharCode.apply(null,u.subarray(i,i+8192));return btoa(s)};const unb64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+async function dkey(p,r){const k=await crypto.subtle.importKey('raw',new TextEncoder().encode(p),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt:new TextEncoder().encode('sync-'+r),iterations:150000,hash:'SHA-256'},k,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
+async function enc(t){const iv=crypto.getRandomValues(new Uint8Array(12)),ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},K,new TextEncoder().encode(t))),o=new Uint8Array(12+ct.length);o.set(iv);o.set(ct,12);return b64(o)}
+async function dec(m){if(!m.e)return m.x;if(!K)return '🔒 加密消息（需要房间密钥）';try{const u=unb64(m.x);return new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:u.slice(0,12)},K,u.slice(12)))}catch(e){return '🔒 密钥不匹配，无法解密'}}
+const hm=ts=>{const d=new Date(ts||Date.now());return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')};
+function add(n,x,ts,mine,sys){const c=$('#chat'),d=document.createElement('div');d.className='m'+(sys?' sys':mine?' me':'');const b=document.createElement('span');b.textContent=sys?x:(mine?x:n+'：'+x);d.appendChild(b);if(!sys){const e=document.createElement('em');e.textContent=hm(ts)+(mine?' · 已发送':'');d.appendChild(e)}c.appendChild(d);c.scrollTop=c.scrollHeight}
+function status(t,ok){$('#st').textContent=t;$('#dot').className='dot'+(ok?' ok':'')}
+function connect(){ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host);ws.onopen=()=>{retry=0;status('在线',1);ws.send(JSON.stringify({t:'join',room,name:me,cid}))};ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(_){return}if(m.t==='hist'){Q=Q.then(async()=>{$('#chat').textContent='';add('','已进入房间 '+room,0,0,1);for(const h of m.m)add(h.n,await dec(h),h.ts,h.c===cid)})}else if(m.t==='msg'){Q=Q.then(async()=>add(m.n,await dec(m),m.ts,m.c===cid))}else if(m.t==='users'){list=m.list;$('#on').textContent='在线 '+list.length;$('#on').title=list.join('、')}else if(m.t==='err')add('',m.x,0,0,1)};ws.onclose=()=>{status('重连中…',0);if(joined)setTimeout(connect,Math.min(1000*2**retry++,15000))};ws.onerror=()=>{try{ws.close()}catch(_){}}}
+async function enter(){const n=$('#nm').value.trim(),r=$('#rm').value.trim(),p=$('#pw').value;$('#err').textContent='';if(!n||!/^[\w\-\u4e00-\u9fa5]{1,30}$/.test(r)){$('#err').textContent='请填写昵称，房间名只能含字母、数字、下划线、横线和中文';return}try{localStorage.setItem('nm',n);localStorage.setItem('rm',r)}catch(_){}me=n;room=r;K=p?await dkey(p,r):null;$('#lock').textContent=K?'🔒':'';$('#rt').textContent=r;$('#login').classList.remove('on');$('#main').classList.add('on');$('#chat').textContent='';joined=true;status('连接中',0);connect()}
+async function sendMsg(){const v=$('#msg').value.trim();if(!v||!ws||ws.readyState!==1)return;$('#msg').value='';ws.send(JSON.stringify(K?{t:'msg',e:1,x:await enc(v)}:{t:'msg',x:v}))}
+$('#go').onclick=enter;$('#pw').onkeydown=e=>{if(e.key==='Enter')enter()};$('#snd').onclick=sendMsg;$('#msg').onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing)sendMsg()};$('#back').onclick=()=>{joined=false;if(ws)ws.close();$('#main').classList.remove('on');$('#login').classList.add('on')};try{$('#nm').value=localStorage.getItem('nm')||'';$('#rm').value=localStorage.getItem('rm')||''}catch(_){}
+let dp=null;addEventListener('beforeinstallprompt',e=>{e.preventDefault();dp=e;$('#inst').style.display='block'});$('#inst').onclick=async()=>{if(dp){dp.prompt();await dp.userChoice;dp=null;$('#inst').style.display='none'}};const sa=matchMedia('(display-mode: standalone)').matches||navigator.standalone;if(/iphone|ipad|ipod/i.test(navigator.userAgent)&&!sa)$('#hint').textContent='iPhone：点 Safari 底部「分享」→「添加到主屏幕」即可安装。';if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+</script></body></html>
