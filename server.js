@@ -27,7 +27,7 @@ async function redisCommand(...args) {
   if (data.error) throw new Error(data.error);
   return data.result;
 }
-function historyKey(room) { return `syncdark:history:${Buffer.from(room).toString('base64url')}`; }
+function historyKey(room) { return `syncdark:v2:history:${Buffer.from(room).toString('base64url')}`; }
 async function loadHistory(room) {
   if (!redisEnabled) return [];
   try {
